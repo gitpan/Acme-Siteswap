@@ -19,7 +19,7 @@ Acme::Siteswap - Provide information about Juggling Siteswap patterns
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 FUNCTIONS
 
@@ -72,14 +72,14 @@ sub valid {
     # Check that the numbers / throws == # of balls
     my $total = 0;
     for my $t (@throws) {
-		if (ref $t eq 'ARRAY') {
-			foreach my $m_t (@$t) {
-				$total += $m_t;
-			}
-		}
-		else {
-        	$total += $t;
-		}
+        if (ref $t eq 'ARRAY') {
+            foreach my $m_t (@$t) {
+                $total += $m_t;
+            }
+        }
+        else {
+            $total += $t;
+        }
     }
 
     my $avg = $total / @throws;
@@ -88,38 +88,35 @@ sub valid {
         return 0;
     }
 	
-	return $self->_check_timing(@throws);
+    return $self->_check_timing(@throws);
 }
 
 sub _check_timing {
-	my ($self, @throws) = @_;
+    my ($self, @throws) = @_;
+    
+    # foreach non-zero throw, mark where the ball will next be
+    # thrown and make sure that each throw is fed.
+    my @throw_map = map { ref $_ eq 'ARRAY' ? scalar(@$_) 
+                                            : ( $_ > 0 ? 1 : 0 ) } @throws;
+    my @feeds = (0) x scalar @throws;
+    for my $i (0 .. $#throws) {
+        my @subthrows = ref $throws[$i] eq 'ARRAY' ? @{$throws[$i]} 
+                                                   : ($throws[$i]);
+        
+        foreach my $throw (@subthrows) {
+            next if $throws[$i] == 0;
+            my $next_thrown = ($i + $throw) % scalar @throws;
+            $feeds[$next_thrown]++;
+        }
+    }
 
-	
-	# foreach non-zero throw, mark where the ball will next be
-	# thrown and make sure that each throw is fed.
-	my @throw_map = map { ref $_ eq 'ARRAY' 
-							? scalar(@$_) 
-							: ( $_ > 0 ? 1 : 0 ) } @throws;
-	my @feeds = (0) x scalar @throws;
-	for my $i (0 .. $#throws) {
-		my @subthrows = ref $throws[$i] eq 'ARRAY' 
-							? @{$throws[$i]} 
-							: ($throws[$i]);
-		
-		foreach my $throw (@subthrows) {
-			next if $throws[$i] == 0;
-			my $next_thrown = ($i + $throw) % scalar @throws;
-			$feeds[$next_thrown]++;
-		}
-	}
-
-	for my $i (0 .. $#throws) {
-		if ($feeds[$i] != $throw_map[$i]) {
-			$self->{error} = "Multiple throws would land at the same time.";
-			return 0;
-		}
-	}
-	return 1;
+    for my $i (0 .. $#throws) {
+        if ($feeds[$i] != $throw_map[$i]) {
+            $self->{error} = "Multiple throws would land at the same time.";
+            return 0;
+        }
+    }
+    return 1;
 }
 
 =head2 error
@@ -133,7 +130,7 @@ sub error { $_[0]->{error} || '' }
 sub _pattern_to_throws {
     my $pattern = shift;
 
-	my @throw_set = ();
+    my @throw_set = ();
 
     while ($pattern =~ m/
 			# next block of non-multiplex throws
@@ -143,57 +140,55 @@ sub _pattern_to_throws {
 			# or the end of the pattern
 			| (?: \G \z )
 			/xmg) {
-		if ( defined $1 ) {
+        if ( defined $1 ) {
             push (@throw_set,  split (//, $1));
-		}
-		elsif ( defined $2 ) {
+        }
+        elsif ( defined $2 ) {
             push (@throw_set, [ split(//, $2) ]);
-		}
-		else {
-			# if we never get here, the pattern had an issue
-			return @throw_set;
-		}
+        }
+        else {
+            # if we never get here, the pattern had an issue
+            return @throw_set;
+        }
     }
 		
     die "unable to parse pattern: $pattern";
 }
 
 sub _max_throw {
-	my ($throws) = @_;
+    my ($throws) = @_;
 
-	my $max_throw = reduce { 
-		my $a_1 = ( ref $a eq 'ARRAY' ? max(@$a) : $a );
-		my $b_1 = ( ref $b eq 'ARRAY' ? max(@$b) : $b );
-		$a_1 >= $b_1 ? $a_1 : $b_1;
-	} @$throws;
+    my $max_throw = reduce { 
+        my $a_1 = ( ref $a eq 'ARRAY' ? max(@$a) : $a );
+        my $b_1 = ( ref $b eq 'ARRAY' ? max(@$b) : $b );
+        $a_1 >= $b_1 ? $a_1 : $b_1;
+    } @$throws;
 
-	# if our pattern is a 1-length multiplex pattern, 
-	# reduce returns the first element, so correct for
-	# that here
-	$max_throw = max(@$max_throw) if ref $max_throw eq 'ARRAY';
+    # if our pattern is a 1-length multiplex pattern, 
+    # reduce returns the first element, so correct for
+    # that here
+    $max_throw = max(@$max_throw) if ref $max_throw eq 'ARRAY';
 
-	return $max_throw;
+    return $max_throw;
 }
 
 # extend the pattern by the number of throws equal to the biggest
 # throw in the pattern, to ensure that every throw in the pattern
 # lands at least once.
 sub _expand_throws {
-	my ($throws) = @_;
-
-	my $max_throw = _max_throw($throws);
+    my ($throws) = @_;
+    my $max_throw = _max_throw($throws);
 	
-	foreach my $i (0 .. $max_throw) {
-		# if it's a multiplex throw, we want to copy it
-		my $t = ref $throws->[$i] eq 'ARRAY' 
-				? [@{$throws->[$i]}] 
-				: $throws->[$i];
+    foreach my $i (0 .. $max_throw) {
+        # if it's a multiplex throw, we want to copy it
+        my $t = ref $throws->[$i] eq 'ARRAY' ? [@{$throws->[$i]}] 
+                                             : $throws->[$i];
         push @$throws, $t; 
     }
-	return $throws;
+    return $throws;
 }
 
-=head1 AUTHOR
+=head1 AUTHORS
 
 Luke Closs, C<< <cpan at 5thplane dut com> >>
 Multiplex support by Seamus Campbell, C<< <conform at deadgeek rot com >>
