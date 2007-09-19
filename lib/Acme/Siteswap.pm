@@ -2,6 +2,8 @@ package Acme::Siteswap;
 use strict;
 use warnings;
 
+use List::Util qw( max reduce );
+
 =head1 NAME
 
 Acme::Siteswap - Provide information about Juggling Siteswap patterns
@@ -17,7 +19,7 @@ Acme::Siteswap - Provide information about Juggling Siteswap patterns
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 FUNCTIONS
 
@@ -70,7 +72,14 @@ sub valid {
     # Check that the numbers / throws == # of balls
     my $total = 0;
     for my $t (@throws) {
-        $total += $t;
+		if (ref $t eq 'ARRAY') {
+			foreach my $m_t (@$t) {
+				$total += $m_t;
+			}
+		}
+		else {
+        	$total += $t;
+		}
     }
 
     my $avg = $total / @throws;
@@ -78,25 +87,39 @@ sub valid {
         $self->{error} = "sum of throws / # of throws does not equal # of balls!";
         return 0;
     }
+	
+	return $self->_check_timing(@throws);
+}
 
-    # check for throws landing at the same time
-    @throws = (@throws, @throws);
-    my @land_in;
-    for my $i (0 .. $#throws) {
-        my %landed_now;
-        for my $j (0 .. $i) {
-            $land_in[$j]--;
-            $landed_now{$j}++ if $land_in[$j] == 0;
-        }
-        if (keys %landed_now > 1) {
-            $self->{error} = "Multiple throws would land at the same time.";
-            $self->{error} .= " (throws " 
-                . join(", ", map { $_ + 1 } sort keys %landed_now) . ")";
-            return 0;
-        }
-        $land_in[$i] = $throws[$i];
-    }
-    return 1;
+sub _check_timing {
+	my ($self, @throws) = @_;
+
+	
+	# foreach non-zero throw, mark where the ball will next be
+	# thrown and make sure that each throw is fed.
+	my @throw_map = map { ref $_ eq 'ARRAY' 
+							? scalar(@$_) 
+							: ( $_ > 0 ? 1 : 0 ) } @throws;
+	my @feeds = (0) x scalar @throws;
+	for my $i (0 .. $#throws) {
+		my @subthrows = ref $throws[$i] eq 'ARRAY' 
+							? @{$throws[$i]} 
+							: ($throws[$i]);
+		
+		foreach my $throw (@subthrows) {
+			next if $throws[$i] == 0;
+			my $next_thrown = ($i + $throw) % scalar @throws;
+			$feeds[$next_thrown]++;
+		}
+	}
+
+	for my $i (0 .. $#throws) {
+		if ($feeds[$i] != $throw_map[$i]) {
+			$self->{error} = "Multiple throws would land at the same time.";
+			return 0;
+		}
+	}
+	return 1;
 }
 
 =head2 error
@@ -109,17 +132,71 @@ sub error { $_[0]->{error} || '' }
 
 sub _pattern_to_throws {
     my $pattern = shift;
-    if ($pattern =~ m/^\d+$/) {
-        return split //, $pattern;
+
+	my @throw_set = ();
+
+    while ($pattern =~ m/
+			# next block of non-multiplex throws
+			(?: \G (\d+) ) 
+			# or the next multiplex throw
+			| (?: \G \[(\d+)\] )
+			# or the end of the pattern
+			| (?: \G \z )
+			/xmg) {
+		if ( defined $1 ) {
+            push (@throw_set,  split (//, $1));
+		}
+		elsif ( defined $2 ) {
+            push (@throw_set, [ split(//, $2) ]);
+		}
+		else {
+			# if we never get here, the pattern had an issue
+			return @throw_set;
+		}
     }
-    else {
-        die "unable to parse pattern: $pattern";
+		
+    die "unable to parse pattern: $pattern";
+}
+
+sub _max_throw {
+	my ($throws) = @_;
+
+	my $max_throw = reduce { 
+		my $a_1 = ( ref $a eq 'ARRAY' ? max(@$a) : $a );
+		my $b_1 = ( ref $b eq 'ARRAY' ? max(@$b) : $b );
+		$a_1 >= $b_1 ? $a_1 : $b_1;
+	} @$throws;
+
+	# if our pattern is a 1-length multiplex pattern, 
+	# reduce returns the first element, so correct for
+	# that here
+	$max_throw = max(@$max_throw) if ref $max_throw eq 'ARRAY';
+
+	return $max_throw;
+}
+
+# extend the pattern by the number of throws equal to the biggest
+# throw in the pattern, to ensure that every throw in the pattern
+# lands at least once.
+sub _expand_throws {
+	my ($throws) = @_;
+
+	my $max_throw = _max_throw($throws);
+	
+	foreach my $i (0 .. $max_throw) {
+		# if it's a multiplex throw, we want to copy it
+		my $t = ref $throws->[$i] eq 'ARRAY' 
+				? [@{$throws->[$i]}] 
+				: $throws->[$i];
+        push @$throws, $t; 
     }
+	return $throws;
 }
 
 =head1 AUTHOR
 
 Luke Closs, C<< <cpan at 5thplane dut com> >>
+Multiplex support by Seamus Campbell, C<< <conform at deadgeek rot com >>
 
 =head1 BUGS
 

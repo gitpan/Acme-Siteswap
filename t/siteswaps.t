@@ -49,12 +49,14 @@ Simple_siteswaps: {
             96181 72466 8448551 96451 73636 8537741 96631 74734 85345 96901
             75616 85516 97531 75625 85561 94493344 75661 85525 9552952592552
             75751 86416 77416 86425 77425 86461 77461 86731 77731 88441 825
-            824466 861 85716814 8633 91 8246 915 )
+            824466 861 85716814 8633 91 8246 915 780)
         ),
         { valid => 0, pattern => '4', balls => 3,
             reason => qr/does not equal # of balls/ },
         { valid => 0, pattern => '243', balls => 3,
             reason => qr/land at the same time/ },
+        { valid => 0, pattern => '870', balls => 5,
+			reason => qr/land at the same time/ },
     );
 
     test_siteswaps(\@simple);
@@ -63,16 +65,14 @@ Simple_siteswaps: {
 Multiplex_siteswaps: {
     my @multiplexes = (
         ( map { { valid => 1, pattern => $_, balls => 4 } }
-            qw([43]14 [64]1324 [53]22 [64]2323 [54]21 [64]4123 [65]01 [65]3123
-               [43]5323 [74]2421)
+            qw([43]14 [64]1324 [53]22 [64]2323 [54]21 
+               [64]4123 [65]01 [65]3123 [43]5323 [74]2421)
         ),
+		{ valid => 1, pattern => '[33]', balls => 6 },
         { valid => 0, pattern => '[42]15', balls => 4,
             reason => qr/land at the same time/ },
     );
-    TODO: {
-        local $TODO = 'No multiplex support yet';
-        test_siteswaps(\@multiplexes);
-    }
+    test_siteswaps(\@multiplexes);
 }
 
 
